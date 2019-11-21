@@ -1,0 +1,9 @@
+This directory contains internal code and headers for VProc.
+Internal means outside the scope of module writers and implementors...
+Just internal to the VProc system.
+
+SYS headers are included by pre-defining __NEED_${UNIT}_SYS__
+...where ${UNIT} is the name of the vproc unit, for example:
+#define __NEED_VPROC_MM_SYS__
+...would include 'include/sys/vproc_mm_sys.h' from 'include/vproc.h'
+

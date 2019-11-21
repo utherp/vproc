@@ -1,0 +1,142 @@
+
+VProc Feed Specification (v0.1)
+    Written by Stephen Ecker 2010-07-23
+
+------------------------------------------------------------------------------------------------------
+
+This paper describes how feeds are controlled, and how the Memory Manager handles its frame buffers.
+
+ 
+The vproc_feed instance:
+
+    When a frame is created by a transcoder, three buffers from the frame pool are allocated to it.
+    One is the buffer which is currently being written to, one is the buffer just written to,
+    and the last is the next to be written when the current frame is complete.
+
+    When a frame is opened by a transcoder or a client instance, an additional buffer is allocated 
+    to the frame's pool, the one being read by the reader.  When its done with the current frame,
+    it releases it (reducing its reference count, if 0, returning it to the pool) and aquires the
+    next frame from the next in the buffer... the one which has most recently been completed by
+    the writer.
+
+
+  Diagram of feed's frame buffer flow:
+
+                 +---------------------- Free Pool ----------------------
+                 |                                                      |
+                 V                                                      V
+       +----------------------+   +----------------------+   +----------------------+
+       | Next Frame           |<--+ Cur Rdr1 (when done) |<--+ Cur Rdr2 (when done) |<==++
+       +-------+--------------+   +----------------------+   +----------------------+   ||
+               |                                                                        ||
+               +----->--------------->-----------+                                      ||
+                                                 |                                      ||
+                           +=====================V==========================+           ||
+                           |  Writer:       +----+-----------------+        |           ||
+                           |                | Current Frame        |        |           ^^
+                           |                +----+-----------------+        |           ||
+                           |                     |                          |           ||
+                           |                     |                          |           ||
+                           +=====================|==========================+           ||
+                                                 |                                      ||
+                                                 V                                      ||
+                                            +----+-----------------+                    ||
+                                            | Last Frame Completed |                    ||
+                                            +----+-----------------+                    ||
+                                                 |                                      ||
+                               +--------<--------+--------->-------------+              ^^
+                               |                                         |              ||
+           +===================|===========+         +===================|===========+  ||
+           | Reader 1:         V           |         | Reader 2:         V           |  ||
+           |      +------------+---------+ |         |      +------------+---------+ |  ||
+           |      | Reading Frame...     | |         |      | Reading Frame...     | |  ||
+           |      +------------+---------+ |         |      +------------+---------+ |  ||
+           |                   |           |         |                   |           |  ||
+           +===================V===========+         +===================V===========+  ||
+                               |                                         |              ||
+                               +------->---------------------->----------+=======>======++
+
+
+    When a reader attaches to the frame pool, a new buffer is allocated and pushed to the
+    end of the "Free Pool".  When it aquires a new frame, the new frame is ALWAYS the "Last
+    Frame Completed"... the one most recently completed by the writer.  The "Last" buffer's
+    ref count goes up.  When it is released, its ref count is reduced.  If it is reduced to
+    0, then it is returned to the "Free Pool".
+
+    When the writer is finished writing the "Current Frame" buffer, it is moved to the "Last
+    Frame Completed" position, the previous "Last" buffer's ref count is reduced.  If it is
+    reduced to 0 (meaning it is not currently "aquired" by any readers) then it is moved to 
+    the end of the "Free Pool".  Then the "Next Frame" buffer is moved to the "Current Frame"
+    position.  These semantics ensure that there is always a buffer in the "Free Pool" when 
+    the "Current Frame" is complete, even if every reader has a reference to different buffer.
+    
+    Each reader to a frame pool has a missed frame count for that pool.  Every time a frame
+    is completed, all readers which still have a reference to a previous buffer get their
+    missed frame count incremented.  This count is returned by a call to vproc_aquire_frame,
+    then reset to 0.
+
+
+    API:
+    ======================================================
+
+      Common:
+      -----------------------------------------
+        int vproc_close_feed(vproc_feed*);
+
+            Close the feed. 
+            If closed by a reader, it aquires a buffer (if one is not already
+            aquired), removes itself from the list of readers for the feed, and frees the buffer
+            back to the Memory Manager's main frame buffer pool.
+            If closed by a writer, it releases its three buffers back to the MM.  Subsequent
+            calls to vproc_aquire_frame by readers will return -EIDRM, to signify that the
+            feed has been removed.
+
+      Writer:
+      -----------------------------------------
+
+        int vproc_create_feed(vproc_feed_info *info, int flags, int mode);
+
+            creates a new feed of the details specified in info
+            mode is as is defined for open(2).
+            TODO: define vproc_feed_info and flags
+
+        int vproc_complete_frame(vproc_feed_info *info);
+
+            marks current write buffer as complete.  Moves it to the "Last" buffer position,
+            decrements the previous "Last" buffer (moving it to the free pool, if nessesary),
+            and moves the next buffer from the Free Pool into the current buffer position.
+
+      Reader:
+      -----------------------------------------
+
+        vproc_feed *vproc_open_feed(const char *feed_name, int flags);
+
+            Open the feed matching the string pointed to by feed_name for reading.  Causes a
+            new frame buffer to be allocated and added to the feed's Free Pool, adds the 
+            reader to the list of the feed's readers and returns a handle to the feed.  At
+            this point, no frame has been aquired and referenced yet.
+
+        int vproc_aquire_frame(vproc_feed*);
+
+            Aquire a reference to the "Last" buffer in the feed (the last frame completed by
+            the writer).  Increases the reference count of the "Last" buffer and assigns the
+            reader to the buffer.  If any frames were previously aquired, it will be automatically
+            released prior to aquiring the next frame.  If the "Last" buffer is the same as
+            the current buffer, a missed read will be marked to the writer (so the writer may
+            adjust its frame rate if it so chooses) and the reader will perform a conditional
+            wait until the next frame is available.  If the flag O_NONBLOCK was specified in
+            the flags when opening the feed, the missed read will be noted and the function 
+            will return a value of -EWOULDBLOCK.  If the feed has been closed by the writer,
+            a value of -EIDRM will be returned.  Upon success the number of missed frames is
+            returned (frames which completed, but were never aquired and returned to the 
+            free pool).
+
+        int vproc_release_frame(vproc_feed*);
+
+            Release the last aquired frame.  Only use this if you won't be aquiring a new frame
+            right away.  If you want to aquire the next frame right away, use vproc_aquire_frame
+            instead, as it will release the previous buffer and wait for the next frame buffer
+            to become available (if its not already).
+
+
+

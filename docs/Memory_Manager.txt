@@ -1,0 +1,41 @@
+
+VProc Memory Manager Specification (v0.1)
+    Written by Stephen Ecker 2010-07-07
+
+------------------------------------------------------------------------------------------------------
+
+This paper describes the Memory Manager of the VProc video processing system.
+For more information about VProc, see VProc.txt
+
+The Memory Manager (MM) is responsible for allocating, distributing, copying and recycling memory 
+segments for use by all sections of VProc.  Memory for VProc is always 16 byte aligned.  This is
+because many optimized VProc components require alignment up to 16 bytes.  (16 bytes for sse instructions
+and 8 bytes for mmx instructions, for example).  
+
+The MM keep a number of different pools for various purposes:
+
+  * The scratch pool contains small segments for private use by instances of filters, converters
+    (see Format_Manager.txt) and transcoders (see Transcoders.txt).  These segments are private scratch
+    pad space, intended for long term use (the life of the instance).
+
+  * The instance pool contain instance details and paramaters.  These use a specific format which can 
+    be enumerated by client modules for display and modification.  Parameters may be displayed, but
+    never modified by anything but the instance itself by calling its set_param function.
+
+  * The frame pool contain segments allocated for frames.  Segments are reserved for frames of given 
+    formats and recycled when they're no longer needed.  The MM may also reserve a segment for copy-on-
+    write situations, making it important to always call the write trigger of a frame buffer *BEFORE*
+    a frame pointer is permanently dereferenced (e.g. vproc_frame *frame = *frame_ptr) as the frame
+    pointer may change after the write trigger is called.  (See "Feeds.txt" for more information).
+
+If a filter or converter has set the VP_FILTER_SRC_OUTPUT flag, then the output frame buffer pointer
+*MAY* be the same as the source frame buffer.  This flag is a hint to the MM!  A component MUST NOT
+assume this will be the case and always write to the frame buffer pointed to by the output frame buffer
+pointer, even though the pointers may point to the same buffer.
+
+If a filter or converter has set the VP_FILTER_SRC_DUP flag, then the source frame is copied to the 
+output frame buffer before processing (this may be accomplished via a copy-on-write).  As above, it
+is important to always operate on the output frame buffer, as the source frame buffer may no longer
+exist at the time of processing.
+
+

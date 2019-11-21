@@ -1,0 +1,26 @@
+
+VProc Module Specification (v0.1)
+    Written by Stephen Ecker 2010-07-07
+
+------------------------------------------------------------------------------------------------------
+
+This paper describes Module implementation of the VProc video processing system.
+For more information about VProc, see VProc.txt
+
+VProc modules extend various pluggable sections of VProc.  The following sections may be extended with their
+respective plugin types:
+
+  *     Formats:  frame filters and converters (see Format_Manager.txt)
+  *     Clients:  VProc client interfaces (see Client_Manager.txt)
+  * Transcoders:  transcoder threads (see Transcoders.txt)
+
+All plugins require the following functions:
+
+  *        init:  Initialize an instance of a plugin
+  *     destroy:  Destroy an instance of a plugin
+  *   set_param:  Set / change a parameter of an instance (getting parameters is enumerated by VProc)
+
+All Format Manager plugins require the following constant structures
+
+  * conversions:  a NULL terminated array of vproc_conversion structures
+

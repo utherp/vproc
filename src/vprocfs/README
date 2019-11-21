@@ -1,0 +1,9 @@
+To compile: 
+    make
+
+To install:
+    make install
+
+To remove:
+    make deinstall
+

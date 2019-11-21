@@ -1,0 +1,11 @@
+This directory contains headers for the CORE sections of the VProc system.
+CORE means they are *only* included by the CORE section to which it was
+ment for.  Implementors and modules writers should use the headers in the
+root src directory.  Core sections interfacing other core sections should
+use the headers in the "internal" directory.
+
+CORE headers are included by pre-defining __NEED_${UNIT}_CORE__
+...where ${UNIT} is the name of the vproc unit, for example:
+#define __NEED_VPROC_MM_CORE__
+...would include 'include/core/vproc_mm_core.h' from 'include/vproc.h'
+

@@ -1,0 +1,49 @@
+VProc Format Manager Specification (v0.1)
+
+    This paper describes the Format Manager of the VProc video processing system.  For more information about VProc, read VProc.txt.
+
+    The Format Manager (FM) is responsible for indexing, resolving and initializing video (and maybe audio in a future spec.) filters
+    & simple converters provided internally or by a vproc "filter" module (see Vproc_Modules.txt for more information on modules).
+
+    The FM has two main components, filters (FF) and converters (FC).  *SIMPLE* conversions only (those which only require ONE input frame and 
+    may require only ONE output buffer, if needed.  For more complex conversions, a transcoder may be more prefered, see Transcoder.txt).
+    The main difference between the two is semantically based on output: 
+
+        * A filter operates on an input frame to perform some manipulation, such as: deinterlacing; scaling; cropping; altering levels
+          (brightness, contrast, hue, color,...); ect.  The format of the output frame shall *NOT* change from the format of the input
+          frame as a result of a filter  INCLUDING DIMENSIONS!  For ALL purposes, a filter shall *NOT* impose a change which may change
+          the way it would be decoded by a subsequent component of ANY module type referencing this frame.  If such a modification is
+          needed, use a converter instead.  Filters operate atomically on a frame (the filter completes before any further processing
+          is done on the frame by ANY componant of ANY module, unless the module specifies that it wants the frame unfiltered with 
+          VP_FRAME_PURE bit of the flags when a client or transcoder component binds to an input frame.  In this case, the frame would
+          be duplicated before a filter runs (which may be provided by the copy-on-write semantics of the Memory Manager, see Memory_Manager.txt).
+
+        * A converter takes an input format and outputs a different format.  FM converters are used for simple conversions such as:
+          colorspace; pixel format; pixel depth; channel packing (planar, interleaved,...) & ordering (rgb,bgr,ect..); scaling; ect.
+          Converters are ALWAYS provided a seperate input and output frame buffer as the output format is expected to be different
+          from the input format.  If input and output formats and dimensions would be the same, a filter component is a better choice.
+    
+    Buffer semantics for FM Components:
+        An FM componant converter should not require any more than one input frame buffer and one output frame buffer, and may not require an
+        output buffer if the conversion or filtering can be performed within the input frame buffer itself.  If a seperate buffer is not
+        required, the component's flags shall reflect this with the VP_FILTER_SRC_OUTPUT bit (see FLAGS in vproc_filter_componant.txt).  A
+        seperate output buffer is the default behavior.
+
+        In either case, the component will still be provided with a reference to an output buffer, so it should behave the same regardless,
+        the VP_FILTER_SRC_OUTPUT flag is just a hint to the Memory Manager for optimization (copy-on-write, for example).  If the component
+        also has the VP_FILTER_SRC_DUP flag set, then the source buffer will be "copied" to the output buffer before the Format component is
+        run.  Having only the VP_FILTER_SRC_OUTPUT flag set may cause the output buffer to contain the source data already, as the output buffer
+        may be a reference to the input buffer, but does NOT guarantee this!
+
+    Temporal filtering:
+        Temporal filtering currently requires that a FM component manage its own heuristical data pointed to by the private pointer of the 
+        componant's instance structure (more on that later), but expect historical frame referencing to be added in future releases. 
+    
+    Implementation:
+        FM componant instances run within the process (or thread) space of the module utilizing it.  It shall not require more than one call
+        from the module to accomplish its function.  If something more complex is needed, consiter using a transcoder module instead (see 
+        Transcoders.txt).  A minimum of three calls must be implemented for an FM componant:  an instance initializer call; a manipulation call;
+        and a destroy call, to setup the componant instance, run the component's function (filter or convertion), and clean up / destroy the
+        componant instance.  For prototypes and more detailed descriptions of these and other calls which may be implemented, see 'FM_Modules.txt'.
+
+

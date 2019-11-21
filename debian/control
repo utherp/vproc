@@ -1,0 +1,12 @@
+Source: careview-vproc
+Section: local/careview
+Priority: optional
+Maintainer: CareView Communications, Inc. <mclark@care-view.com>
+Build-Depends: debhelper (>= 5)
+Standards-Version: 3.7.2
+
+Package: careview-vproc
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: TBD Short Description
+ TBD Long Description
